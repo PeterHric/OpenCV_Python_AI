@@ -1,4 +1,14 @@
 # (c) Hassan Murtaza : https://github.com/murtazahassan/Learn-OpenCV-in-3-hours/blob/master/chapter8.py
+#
+# Shape Detection and Classification Tool:
+# 1. Image Pre-processing: Converts to grayscale, applies Gaussian blur to reduce noise, and Canny edge detection.
+# 2. Contour Extraction: Identifies external boundaries of objects in the edge-detected image.
+# 3. Shape Approximation: Uses Douglas-Peucker algorithm (approxPolyDP) to simplify contours into polygons.
+# 4. Geometry-based Classification:
+#    - 3 vertices = Triangle
+#    - 4 vertices = Rectangle/Square (distinguished by aspect ratio)
+#    - > 4 vertices = Circle (approximate)
+# 5. Visualization: Draws the detected contours, bounding boxes, and labels the shape types.
 
 import cv2 as cv
 import numpy as np
@@ -6,6 +16,7 @@ import numpy as np
 
 # Stacks images to the row, with given scale
 def stackImages(scale, imgArray):
+    # Dynamic grid layout for displaying multiple image processing stages
     rows = len(imgArray)
     cols = len(imgArray[0])
     rowsAvailable = isinstance(imgArray[0], list)
@@ -44,6 +55,8 @@ def getContours(in_img, draw_to_img):
     # contours, hierarchy = cv.findContours(imgBlur, cv.Mode, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     # cv.RETR_EXTERNAL is specifically good for retrieving the outer boundaries of object (perhaps great for image recognition)
     # Why cv.CHAIN_APPROX_NONE ? Investigate and try others..
+    
+    # Extract only the outermost contours using no compression (stores all contour points)
     contours, hierarchy = cv.findContours(in_img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
     for cnt in contours:
@@ -55,23 +68,27 @@ def getContours(in_img, draw_to_img):
             peri = cv.arcLength(cnt, True)  # True => only go for closed curves (contours)
             print(peri)
             #  Calculate approximate curve (less points with given accuracy)
+            # Core logic: Simplifies the contour into a polygon with fewer vertices
             approx = cv.approxPolyDP(cnt, 0.02 * peri, True)  # A room to adjust / play around with
             print(len(approx))  # print(approx)
             numVertexes = len(approx)
 
+            # Get bounding box coordinates for labeling
             x, y, w, h = cv.boundingRect(approx)
             objectType = "None"
+            
+            # Classification based on the number of detected vertices
             if numVertexes == 3:
                 objectType = "Tri"
             elif numVertexes == 4:
                 objectType = "Rect"
-                aspectRatio = w // h
-                if .95 <= aspectRatio <= 10.5:
+                aspectRatio = w / float(h) # Calculate aspect ratio to distinguish square
+                if .95 <= aspectRatio <= 1.05:
                     objectType = "Sqr"
             elif numVertexes > 4:
                 objectType = "Circ"
 
-            # Draw a rectangle around the detected object
+            # Draw a rectangle around the detected object and add text label
             cv.putText(imgContour, objectType, (x+5, y + h // 2),  # Object type label
                        cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
             cv.rectangle(imgContour, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -90,27 +107,29 @@ text = 'Img width: ' + str(img.shape[0]) + ' height: ' + str(img.shape[1])
 
 # Convert to BW
 imgBW = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
 # Add blur for better transition (EDGE) detection
 sigmaX_gauss = 1
 sigmaY_gauss = 1
 conv_kernel_mtx = (5, 5)  # have to be odd numbers !
 imgBlur = cv.GaussianBlur(imgBW, conv_kernel_mtx, sigmaX_gauss, sigmaY_gauss)  # Y sigma defaulted to 1
 
-# Find contours
+# Find contours using Canny Edge Detector (hysteresis thresholding)
 imgCanny = cv.Canny(imgBlur, 50, 50)
 
-# Blank helper
+# Blank helper for stack visualization
 imgBlank = np.zeros_like(img)
 
 imgContour = img.copy()  # Something like a (deep?) copy c-tor
 # imgContour = np.array(img).reshape((-1,1,2)).astype(np.int32)
 getContours(imgCanny, imgContour)
 
+# Prepare a 2x3 grid of the processing stages
 imgStack = stackImages(0.6, ([img, imgBW, imgBlur],
                              [imgCanny, imgContour, imgBlank]))
 
 # imgStack = np.vstack((np.hstack((img, imgBW, imgBlur)),
-#                      np.hstack((imgCanny, imgContour, imgBlank))))
+#                       np.hstack((imgCanny, imgContour, imgBlank))))
 
 cv.imshow("Orig, BW, Blur, Blank", imgStack)
 
